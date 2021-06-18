@@ -12,6 +12,7 @@ class DismissiblePage extends StatefulWidget {
     @required this.child,
     this.isFullScreen = true,
     this.disabled = false,
+    this.passive = false,
     this.backgroundColor = Colors.black,
     this.direction = DismissDirection.vertical,
     this.dismissThresholds = const <DismissDirection, double>{},
@@ -23,14 +24,16 @@ class DismissiblePage extends StatefulWidget {
     this.maxTransformValue = .4,
     this.onDismiss,
     this.onDragStart,
+    this.onDragUpdate,
     this.onDragEnd,
     this.reverseDuration = const Duration(milliseconds: 500),
     Key key,
   })  : assert(dragStartBehavior != null),
         super(key: key);
 
-  final VoidCallback onDragStart;
-  final VoidCallback onDragEnd;
+  final Function(DragStartDetails) onDragStart;
+  final Function(DragUpdateDetails) onDragUpdate;
+  final Function(DragEndDetails) onDragEnd;
   final VoidCallback onDismiss;
   final bool isFullScreen;
   final double minScale;
@@ -38,6 +41,7 @@ class DismissiblePage extends StatefulWidget {
   final double maxRadius;
   final double maxTransformValue;
   final bool disabled;
+  final bool passive;
   final Widget child;
   final Color backgroundColor;
   final DismissDirection direction;
@@ -113,7 +117,7 @@ class _DismissibleState extends State<DismissiblePage>
   }
 
   void _handleDragStart(DragStartDetails details) {
-    widget.onDragStart?.call();
+    widget.onDragStart?.call(details);
     _dragUnderway = true;
     if (_moveController.isAnimating) {
       _dragExtent =
@@ -127,8 +131,12 @@ class _DismissibleState extends State<DismissiblePage>
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
-    if (!_isActive || _moveController.isAnimating || widget.disabled) return;
+    if (!_isActive ||
+        _moveController.isAnimating ||
+        widget.disabled ||
+        widget.passive) return;
 
+    widget.onDragUpdate?.call(details);
     final delta = details.primaryDelta;
     final oldDragExtent = _dragExtent;
     bool _(DismissDirection d) => widget.direction == d;
@@ -179,6 +187,7 @@ class _DismissibleState extends State<DismissiblePage>
 
   Future<void> _handleDragEnd(DragEndDetails details) async {
     if (!_isActive || _moveController.isAnimating) return;
+    widget.onDragEnd?.call(details);
     if (!_moveController.isDismissed) {
       if (_moveController.value >
           (widget.dismissThresholds[_dismissDirection] ?? _kDismissThreshold)) {
@@ -186,7 +195,6 @@ class _DismissibleState extends State<DismissiblePage>
       } else {
         _moveController.reverseDuration = widget.reverseDuration;
         _moveController.reverse();
-        widget.onDragEnd?.call();
       }
     }
   }
@@ -233,9 +241,10 @@ class _DismissibleState extends State<DismissiblePage>
             color: widget.backgroundColor.withOpacity(1 - k),
             child: Transform(
               alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..translate(dx * _dragExtent, dy * _dragExtent)
-                ..scale(scale, scale),
+              transform:
+                  widget.passive ? Matrix4.identity() : Matrix4.identity()
+                    ..translate(dx * _dragExtent, dy * _dragExtent)
+                    ..scale(scale, scale),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(radius),
                 child: child,
